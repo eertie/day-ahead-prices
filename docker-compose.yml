@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: entsoe_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist cache and raw data
+      - ./cache:/app/cache
+      - ./data:/app/data
+    env_file:
+      - .env
+    # Uses CMD from Dockerfile:
+    # CMD ["uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  run_loop:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: entsoe_run_loop
+    restart: "no"  # stop bij fout (zoals 401 of argumentfout)
+    depends_on:
+      - api
+    volumes:
+      - ./cache:/app/cache
+      - ./data:/app/data
+    env_file:
+      - .env
+    # Gebruik één regel of correct escapede backslashes
+    command: >
+      sh -c "python -u ha_entsoe.py run-loop --zone ${ZONE_EIC} --from ${EXCH_FROM_EIC} --to ${EXCH_TO_EIC} --tick ${TICK_SECONDS} --prices-ttl ${TTL_PRICES} --load-da-ttl ${TTL_LOAD_DA} --load-act-ttl ${TTL_LOAD_ACT} --gen-ttl ${TTL_GEN} --netpos-ttl ${TTL_NETPOS} --exch-ttl ${TTL_EXCH}"

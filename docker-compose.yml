@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   api:
     build:
@@ -11,6 +9,7 @@ services:
       - "8000:8000"
     volumes:
       # Persist cache and raw data
+      - ./:/app
       - ./cache:/app/cache
       - ./data:/app/data
     env_file:

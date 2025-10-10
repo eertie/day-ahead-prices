@@ -6,13 +6,11 @@ from typing import List, Optional
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 
-# Import core logic
 try:
     import ha_entsoe as entsoe
 except Exception as e:
     raise RuntimeError(f"Could not import ha_entsoe.py: {e}")
 
-# Load .env so defaults appear based on user config
 try:
     from dotenv import load_dotenv
 
@@ -20,8 +18,14 @@ try:
 except Exception:
     pass
 
-# Resolve defaults from environment or ha_entsoe constants
-DEFAULT_ZONE = os.getenv("ZONE_EIC", entsoe.ZONE_EIC_DEFAULT)
+# Preset EIC options for dropdown in docs
+EIC_OPTIONS = {
+    "Netherlands": "10YNL----------L",
+    "Belgium": "10YBE----------2",
+    "Germany": "10Y1001A1001A83F",
+}
+
+DEFAULT_ZONE = os.getenv("ZONE_EIC", EIC_OPTIONS["Netherlands"])
 DEFAULT_TIMEZONE = os.getenv("TIME_ZONE", entsoe.TIME_ZONE_NAME)
 DEFAULT_FROM_EIC = os.getenv("EXCH_FROM_EIC", entsoe.EXCH_FROM_EIC_DEFAULT)
 DEFAULT_TO_EIC = os.getenv("EXCH_TO_EIC", entsoe.EXCH_TO_EIC_DEFAULT)
@@ -33,7 +37,7 @@ app = FastAPI(
         "net position, and scheduled exchanges, plus a planning helper.\n\n"
         "Defaults shown here are loaded from your .env when available."
     ),
-    version="1.3.0",
+    version="1.5.0",
 )
 
 
@@ -64,6 +68,7 @@ def root():
         "endpoints": [
             "/prices",
             "/load",
+            "/load-da-forecast",
             "/gen-forecast",
             "/netpos",
             "/exchanges",
@@ -104,31 +109,30 @@ def get_config():
 )
 def get_prices(
     date_str: Optional[str] = Query(
-        None,
+        (date.today() + timedelta(days=1)).isoformat(),
         alias="date",
-        description="Date in YYYY-MM-DD. Defaults to next day if omitted.",
+        description="Date in YYYY-MM-DD. Defaults to tomorrow.",
         examples={
-            "default": {"summary": "Tomorrow (default)", "value": None},
+            "default": {
+                "summary": "Tomorrow (default)",
+                "value": (date.today() + timedelta(days=1)).isoformat(),
+            },
             "specific": {"summary": "Specific date", "value": "2025-01-15"},
         },
     ),
     zone: Optional[str] = Query(
-        None,
+        DEFAULT_ZONE,
         description="Bidding zone EIC code.",
+        enum=list(EIC_OPTIONS.values()),  # dropdown in docs
         example=DEFAULT_ZONE,
-    ),
-    cache_ttl_s: Optional[int] = Query(
-        None,
-        ge=0,
-        description=f"Cache TTL in seconds. Default from .env or {entsoe.TTL_PRICES_DEFAULT}.",
-        example=entsoe.TTL_PRICES_DEFAULT,
     ),
 ):
     try:
         day = parse_date_or_default(date_str)
         z = zone or default_zone()
-        ttl = cache_ttl_s if cache_ttl_s is not None else entsoe.TTL_PRICES_DEFAULT
-        rows = entsoe.get_day_ahead_prices(day, z, cache_ttl_s=ttl)
+        rows = entsoe.get_day_ahead_prices(
+            day, z, cache_ttl_s=entsoe.TTL_PRICES_DEFAULT
+        )
         return {"date": day.isoformat(), "zone": z, "prices": rows}
     except Exception as e:
         return error_response(e)
@@ -142,36 +146,63 @@ def get_prices(
 )
 def get_load(
     date_str: Optional[str] = Query(
-        None,
+        (date.today() + timedelta(days=1)).isoformat(),
         alias="date",
-        description="Date in YYYY-MM-DD. Defaults to next day for DA; Actuals use same date.",
+        description="Date in YYYY-MM-DD. Defaults to tomorrow for DA; Actuals use same date.",
         example=(date.today() + timedelta(days=1)).isoformat(),
     ),
     zone: Optional[str] = Query(
-        None,
+        DEFAULT_ZONE,
         description="Bidding zone EIC code.",
+        enum=list(EIC_OPTIONS.values()),
         example=DEFAULT_ZONE,
-    ),
-    ttl_da: Optional[int] = Query(
-        None,
-        ge=0,
-        description=f"Cache TTL for day-ahead load (seconds). Default from .env or {entsoe.TTL_LOAD_DA_DEFAULT}.",
-        example=entsoe.TTL_LOAD_DA_DEFAULT,
-    ),
-    ttl_act: Optional[int] = Query(
-        None,
-        ge=0,
-        description=f"Cache TTL for actual load (seconds). Default from .env or {entsoe.TTL_LOAD_ACT_DEFAULT}.",
-        example=entsoe.TTL_LOAD_ACT_DEFAULT,
     ),
 ):
     try:
         day = parse_date_or_default(date_str)
         z = zone or default_zone()
-        tda = ttl_da if ttl_da is not None else entsoe.TTL_LOAD_DA_DEFAULT
-        tact = ttl_act if ttl_act is not None else entsoe.TTL_LOAD_ACT_DEFAULT
-        payload = entsoe.get_total_load(day, z, ttl_da=tda, ttl_act=tact)
+        payload = entsoe.get_total_load(
+            day,
+            z,
+            ttl_da=entsoe.TTL_LOAD_DA_DEFAULT,
+            ttl_act=entsoe.TTL_LOAD_ACT_DEFAULT,
+        )
         return {"date": day.isoformat(), "zone": z, "load": payload}
+    except Exception as e:
+        return error_response(e)
+
+
+@app.get(
+    "/load-da-forecast",
+    tags=["load"],
+    summary="6.1.B Day-ahead Total Load Forecast (A65, A01)",
+    description="Returns hourly Day-ahead Total Load Forecast for the requested day and zone (documentType=A65, processType=A01).",
+)
+def get_load_da_forecast(
+    date_str: Optional[str] = Query(
+        (date.today() + timedelta(days=1)).isoformat(),
+        alias="date",
+        description="Date in YYYY-MM-DD. Defaults to tomorrow.",
+        example=(date.today() + timedelta(days=1)).isoformat(),
+    ),
+    zone: Optional[str] = Query(
+        DEFAULT_ZONE,
+        description="EIC code of Control Area, Bidding Zone or Country.",
+        enum=list(EIC_OPTIONS.values()),
+        example=DEFAULT_ZONE,
+    ),
+):
+    try:
+        day = parse_date_or_default(date_str)
+        z = zone or default_zone()
+        rows = entsoe.get_day_ahead_total_load_forecast(
+            day, z, cache_ttl_s=entsoe.TTL_LOAD_DA_DEFAULT
+        )
+        return {
+            "date": day.isoformat(),
+            "zone": z,
+            "day_ahead_total_load_forecast": rows,
+        }
     except Exception as e:
         return error_response(e)
 
@@ -184,33 +215,33 @@ def get_load(
 )
 def get_gen_forecast(
     date_str: Optional[str] = Query(
-        None,
+        (date.today() + timedelta(days=1)).isoformat(),
         alias="date",
-        description="Date in YYYY-MM-DD. Defaults to next day if omitted.",
+        description="Date in YYYY-MM-DD. Defaults to tomorrow.",
         example=(date.today() + timedelta(days=1)).isoformat(),
     ),
     zone: Optional[str] = Query(
-        None,
+        DEFAULT_ZONE,
         description="Bidding zone EIC code.",
+        enum=list(EIC_OPTIONS.values()),
         example=DEFAULT_ZONE,
     ),
     psr: Optional[List[str]] = Query(
         None,
-        description="Optional list of PSR types, e.g., B16 (Solar), B18 (Wind Onshore), B19 (Wind Offshore). If omitted, returns all.",
+        description=(
+            "Optional PSR types. Common examples: "
+            "B16 = Solar, B18 = Wind Onshore, B19 = Wind Offshore. "
+            "If omitted, returns all."
+        ),
         example=["B16", "B18", "B19"],
-    ),
-    cache_ttl_s: Optional[int] = Query(
-        None,
-        ge=0,
-        description=f"Cache TTL in seconds. Default from .env or {entsoe.TTL_GEN_DEFAULT}.",
-        example=entsoe.TTL_GEN_DEFAULT,
     ),
 ):
     try:
         day = parse_date_or_default(date_str)
         z = zone or default_zone()
-        ttl = cache_ttl_s if cache_ttl_s is not None else entsoe.TTL_GEN_DEFAULT
-        rows = entsoe.get_generation_forecast(day, z, cache_ttl_s=ttl, psr_types=psr)
+        rows = entsoe.get_generation_forecast(
+            day, z, cache_ttl_s=entsoe.TTL_GEN_DEFAULT, psr_types=psr
+        )
         return {
             "date": day.isoformat(),
             "zone": z,
@@ -229,28 +260,22 @@ def get_gen_forecast(
 )
 def get_net_position(
     date_str: Optional[str] = Query(
-        None,
+        (date.today() + timedelta(days=1)).isoformat(),
         alias="date",
-        description="Date in YYYY-MM-DD. Defaults to next day if omitted.",
+        description="Date in YYYY-MM-DD. Defaults to tomorrow.",
         example=(date.today() + timedelta(days=1)).isoformat(),
     ),
     zone: Optional[str] = Query(
-        None,
+        DEFAULT_ZONE,
         description="Bidding zone EIC code.",
+        enum=list(EIC_OPTIONS.values()),
         example=DEFAULT_ZONE,
-    ),
-    cache_ttl_s: Optional[int] = Query(
-        None,
-        ge=0,
-        description=f"Cache TTL in seconds. Default from .env or {entsoe.TTL_NETPOS_DEFAULT}.",
-        example=entsoe.TTL_NETPOS_DEFAULT,
     ),
 ):
     try:
         day = parse_date_or_default(date_str)
         z = zone or default_zone()
-        ttl = cache_ttl_s if cache_ttl_s is not None else entsoe.TTL_NETPOS_DEFAULT
-        rows = entsoe.get_net_position(day, z, cache_ttl_s=ttl)
+        rows = entsoe.get_net_position(day, z, cache_ttl_s=entsoe.TTL_NETPOS_DEFAULT)
         return {"date": day.isoformat(), "zone": z, "net_position": rows}
     except Exception as e:
         return error_response(e)
@@ -264,32 +289,29 @@ def get_net_position(
 )
 def get_exchanges(
     date_str: str = Query(
-        ...,
+        (date.today()).isoformat(),
         alias="date",
         description="Date in YYYY-MM-DD.",
         example=date.today().isoformat(),
     ),
     from_zone: str = Query(
-        ...,
+        EIC_OPTIONS["Netherlands"],
         description="From bidding zone EIC code.",
+        enum=list(EIC_OPTIONS.values()),
         example=DEFAULT_FROM_EIC,
     ),
     to_zone: str = Query(
-        ...,
+        EIC_OPTIONS["Belgium"],
         description="To bidding zone EIC code.",
+        enum=list(EIC_OPTIONS.values()),
         example=DEFAULT_TO_EIC,
-    ),
-    cache_ttl_s: Optional[int] = Query(
-        None,
-        ge=0,
-        description=f"Cache TTL in seconds. Default from .env or {entsoe.TTL_EXCH_DEFAULT}.",
-        example=entsoe.TTL_EXCH_DEFAULT,
     ),
 ):
     try:
         day = date.fromisoformat(date_str)
-        ttl = cache_ttl_s if cache_ttl_s is not None else entsoe.TTL_EXCH_DEFAULT
-        rows = entsoe.get_scheduled_exchanges(day, from_zone, to_zone, cache_ttl_s=ttl)
+        rows = entsoe.get_scheduled_exchanges(
+            day, from_zone, to_zone, cache_ttl_s=entsoe.TTL_EXCH_DEFAULT
+        )
         return {
             "date": day.isoformat(),
             "from_zone": from_zone,
@@ -312,18 +334,19 @@ def get_exchanges(
     "/plan",
     tags=["planning"],
     summary="Suggest Automation Plan",
-    description="Suggests cheaper/greener hours for the requested date and zone based on prices, load, and generation forecast.",
+    description="Suggests cheaper/greener hours for the requested date and zone based on prices (A44), day-ahead load (A65) and generation forecast (A69). Actual load (A68) is skipped for future dates.",
 )
 def plan(
     date_str: Optional[str] = Query(
-        None,
+        (date.today() + timedelta(days=1)).isoformat(),
         alias="date",
-        description="Date in YYYY-MM-DD. Defaults to next day if omitted.",
+        description="Date in YYYY-MM-DD. Defaults to tomorrow.",
         example=(date.today() + timedelta(days=1)).isoformat(),
     ),
     zone: Optional[str] = Query(
-        None,
+        DEFAULT_ZONE,
         description="Bidding zone EIC code.",
+        enum=list(EIC_OPTIONS.values()),
         example=DEFAULT_ZONE,
     ),
 ):

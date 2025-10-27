@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-FastAPI server voor ENTSO-E energie prijzen.
-Biedt endpoints voor huidige dag, morgen en custom datums.
+FastAPI server for ENTSO-E energy prices.
+Provides endpoints for current day, tomorrow and custom dates.
 """
 
 import os
@@ -72,7 +72,7 @@ EIC_OPTIONS = {
 DEFAULT_ZONE = os.getenv("ZONE_EIC", EIC_OPTIONS["Netherlands"])
 DEFAULT_TIMEZONE = "Europe/Amsterdam"
 
-# Tijdzone configuratie - ALTIJD Nederlandse tijd gebruiken
+# Timezone configuration - ALWAYS use Dutch time
 NL_TZ = pytz.timezone("Europe/Amsterdam")
 
 # ============================================================================
@@ -82,9 +82,9 @@ NL_TZ = pytz.timezone("Europe/Amsterdam")
 app = FastAPI(
     title="ENTSO‑E Home Automation API",
     description=(
-        "Kleine wrapper voor ENTSO‑E‑data (prijzen, load, productie, netpositie) "
-        "met eenvoudige endpoints gericht op home automation. "
-        "Ondersteunt zowel PT60M (hourly) als PT15M (15-minuten) resolutie."
+        "Small wrapper for ENTSO‑E data (prices, load, production, net position) "
+        "with simple endpoints focused on home automation. "
+        "Supports both PT60M (hourly) and PT15M (15-minute) resolution."
     ),
     version="2.9.0",
 )
@@ -332,12 +332,12 @@ def create_metadata(
     execution_time_ms: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
-    Creëer metadata object met request info.
+    Create metadata object with request info.
 
     Args:
-        endpoint: Endpoint naam
-        request_params: Dictionary met request parameters
-        execution_time_ms: Optionele executie tijd in milliseconden
+        endpoint: Endpoint name
+        request_params: Dictionary with request parameters
+        execution_time_ms: Optional execution time in milliseconds
 
     Returns:
         Metadata dictionary
@@ -362,13 +362,13 @@ def create_metadata(
 
 def calculate_std_dev(prices: List[float]) -> float:
     """
-    Bereken standaarddeviatie van prijzen.
+    Calculate standard deviation of prices.
 
     Args:
-        prices: Lijst van prijzen (ct/kWh)
+        prices: List of prices (ct/kWh)
 
     Returns:
-        Standaarddeviatie (σ)
+        Standard deviation (σ)
     """
     if len(prices) < 2:
         return 0.0
@@ -380,20 +380,20 @@ def calculate_std_dev(prices: List[float]) -> float:
 
 def is_std_dev_relevant(std_dev: float, price_range: float, slot_count: int) -> bool:
     """
-    Bepaal of standaarddeviatie statistisch relevant is om te tonen.
+    Determine if standard deviation is statistically relevant to show.
 
     Criteria:
-    - Minimaal 3 slots (anders niet zinvol)
-    - Standaarddeviatie > 0.1 ct/kWh (anders verwaarloosbaar)
-    - Standaarddeviatie > 5% van de range (anders te klein t.o.v. variatie)
+    - Minimum 3 slots (otherwise not meaningful)
+    - Standard deviation > 0.1 ct/kWh (otherwise negligible)
+    - Standard deviation > 5% of range (otherwise too small relative to variation)
 
     Args:
-        std_dev: Standaarddeviatie
-        price_range: Max - min prijs in blok
-        slot_count: Aantal slots in blok
+        std_dev: Standard deviation
+        price_range: Max - min price in block
+        slot_count: Number of slots in block
 
     Returns:
-        True als relevant om te tonen
+        True if relevant to show
     """
     if slot_count < 3:
         return False
@@ -409,10 +409,10 @@ def is_std_dev_relevant(std_dev: float, price_range: float, slot_count: int) -> 
 
 def get_rank_icon(rank: int) -> str:
     """
-    Get emoji icon voor rank positie.
+    Get emoji icon for rank position.
 
     Args:
-        rank: Positie (1 = goedkoopste)
+        rank: Position (1 = cheapest)
 
     Returns:
         Emoji string
@@ -439,8 +439,8 @@ def get_rank_icon(rank: int) -> str:
 
 def belongs_to_today(hour_local: str) -> bool:
     """
-    Check of een slot tot vandaag behoort (niet na middernacht).
-    Slots tussen 00:00 - 06:00 beschouwen we als "morgen vroeg".
+    Check if a slot belongs to today (not after midnight).
+    Slots between 00:00 - 06:00 we consider as "early tomorrow".
     """
     try:
         dt = datetime.strptime(hour_local, "%Y-%m-%d %H:%M")
@@ -453,38 +453,38 @@ def is_past_slot(
     hour_local: str, slot_date: date, resolution_minutes: int = 60
 ) -> bool:
     """
-    Check of een INDIVIDUEEL slot volledig verstreken is (NEDERLANDSE TIJD).
+    Check if an INDIVIDUAL slot has completely passed (DUTCH TIME).
 
-    Een slot is pas verstreken als de EIND-tijd voorbij is.
+    A slot is only past when the END time has passed.
 
     Args:
         hour_local: Timestamp string "YYYY-MM-DD HH:MM"
-        slot_date: Datum van het slot
-        resolution_minutes: Resolutie in minuten (60 of 15)
+        slot_date: Date of the slot
+        resolution_minutes: Resolution in minutes (60 or 15)
 
     Returns:
-        True als slot volledig voorbij is
+        True if slot is completely past
     """
-    # Gebruik NEDERLANDSE tijd!
+    # Use DUTCH time!
     now = datetime.now(NL_TZ)
     today = now.date()
 
-    # Als de datum in het verleden ligt, is het zeker verstreken
+    # If the date is in the past, it's definitely past
     if slot_date < today:
         return True
 
-    # Als de datum in de toekomst ligt, is het zeker niet verstreken
+    # If the date is in the future, it's definitely not past
     if slot_date > today:
         return False
 
-    # Voor vandaag: check of het slot VOLLEDIG voorbij is
+    # For today: check if the slot is COMPLETELY past
     try:
         dt = datetime.strptime(hour_local, "%Y-%m-%d %H:%M")
-        # Maak timezone-aware met Nederlandse tijd
+        # Make timezone-aware with Dutch time
         dt = NL_TZ.localize(dt)
         end_dt = dt + timedelta(minutes=resolution_minutes)
 
-        # Slot is pas verstreken als de eindtijd VOORBIJ is
+        # Slot is only past when the end time is PAST
         is_past = now > end_dt
 
         if LOG_LEVEL == "DEBUG":
@@ -504,22 +504,22 @@ def is_past_slot(
 def is_current_or_future_slot(
     hour_local: str, slot_date: date, resolution_minutes: int = 60
 ) -> bool:
-    """Check of een slot actief of toekomstig is."""
+    """Check if a slot is active or future."""
     return not is_past_slot(hour_local, slot_date, resolution_minutes)
 
 
 def detect_resolution(slots: List[Dict]) -> int:
     """
-    Detecteer de resolutie van de slots (in minuten).
+    Detect the resolution of the slots (in minutes).
 
     Returns:
-        60 voor PT60M (hourly)
-        15 voor PT15M (15-minuten)
+        60 for PT60M (hourly)
+        15 for PT15M (15-minute)
     """
     if not slots or len(slots) < 2:
         return 60
 
-    # Controleer resolution veld indien aanwezig
+    # Check resolution field if present
     if "resolution" in slots[0]:
         res_text = slots[0]["resolution"].upper()
         if "PT15M" in res_text:
@@ -527,7 +527,7 @@ def detect_resolution(slots: List[Dict]) -> int:
         elif "PT60M" in res_text or "PT1H" in res_text:
             return 60
 
-    # Fallback: bereken uit tijd tussen eerste twee slots
+    # Fallback: calculate from time between first two slots
     try:
         t1 = datetime.strptime(slots[0]["hour_local"], "%Y-%m-%d %H:%M")
         t2 = datetime.strptime(slots[1]["hour_local"], "%Y-%m-%d %H:%M")
@@ -545,12 +545,12 @@ def detect_resolution(slots: List[Dict]) -> int:
 
 def format_time_range(start: str, end: str, resolution_minutes: int = 60) -> str:
     """
-    Formateer tijd range op basis van resolutie.
+    Format time range based on resolution.
 
     Args:
-        start: Start tijd string "YYYY-MM-DD HH:MM"
-        end: Start tijd van LAATSTE slot "YYYY-MM-DD HH:MM"
-        resolution_minutes: Resolutie in minuten (60 of 15)
+        start: Start time string "YYYY-MM-DD HH:MM"
+        end: Start time of LAST slot "YYYY-MM-DD HH:MM"
+        resolution_minutes: Resolution in minutes (60 or 15)
 
     Returns:
         Formatted string "HH:MM - HH:MM"
@@ -559,8 +559,8 @@ def format_time_range(start: str, end: str, resolution_minutes: int = 60) -> str
         start_dt = datetime.strptime(start, "%Y-%m-%d %H:%M")
         end_dt = datetime.strptime(end, "%Y-%m-%d %H:%M")
 
-        # BELANGRIJK: end is de START van het laatste slot
-        # Dus we moeten resolution_minutes TOEVOEGEN voor de echte eindtijd
+        # IMPORTANT: end is the START of the last slot
+        # So we need to ADD resolution_minutes for the real end time
         final_dt = end_dt + timedelta(minutes=resolution_minutes)
 
         if LOG_LEVEL == "DEBUG":
@@ -578,14 +578,14 @@ def format_time_range(start: str, end: str, resolution_minutes: int = 60) -> str
 
 def calculate_total_duration(positions: List[int], resolution_minutes: int = 60) -> int:
     """
-    Bereken totale duur in minuten van een groep posities.
+    Calculate total duration in minutes of a group of positions.
 
     Args:
-        positions: Lijst van position nummers
-        resolution_minutes: Resolutie in minuten (60 of 15)
+        positions: List of position numbers
+        resolution_minutes: Resolution in minutes (60 or 15)
 
     Returns:
-        Totale duur in minuten
+        Total duration in minutes
     """
     if not positions:
         return 0
@@ -593,42 +593,42 @@ def calculate_total_duration(positions: List[int], resolution_minutes: int = 60)
 
 
 def get_day_label(target_date: date) -> str:
-    """Bepaal Nederlands label op basis van datum."""
+    """Determine English label based on date."""
     today = date.today()
     tomorrow = today + timedelta(days=1)
 
     if target_date == today:
-        return "Vandaag"
+        return "Today"
     elif target_date == tomorrow:
-        return "Morgen"
+        return "Tomorrow"
     else:
-        days_nl = [
-            "maandag",
-            "dinsdag",
-            "woensdag",
-            "donderdag",
-            "vrijdag",
-            "zaterdag",
-            "zondag",
+        days_en = [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
         ]
-        months_nl = [
+        months_en = [
             "",
-            "januari",
-            "februari",
-            "maart",
-            "april",
-            "mei",
-            "juni",
-            "juli",
-            "augustus",
-            "september",
-            "oktober",
-            "november",
-            "december",
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
         ]
 
-        day_name = days_nl[target_date.weekday()]
-        month_name = months_nl[target_date.month]
+        day_name = days_en[target_date.weekday()]
+        month_name = months_en[target_date.month]
 
         return f"{day_name} {target_date.day} {month_name}"
 
@@ -645,18 +645,18 @@ def group_consecutive_slots(
     resolution_minutes: int = 60,
 ) -> List[Dict]:
     """
-    Groepeer opeenvolgende slots met kleine tussenpozen EN vergelijkbare prijzen.
+    Group consecutive slots with small gaps AND comparable prices.
 
-    Ondersteunt zowel PT60M (hourly) als PT15M (15-minuten) resolutie.
+    Supports both PT60M (hourly) and PT15M (15-minute) resolution.
 
     Args:
-        slots: Lijst met slot dictionaries
-        max_gap_minutes: Maximale tijd gap tussen slots
-        max_price_gap_ct: Maximaal prijsverschil binnen een groep (ct/kWh)
-        resolution_minutes: Resolutie in minuten (60 of 15)
+        slots: List of slot dictionaries
+        max_gap_minutes: Maximum time gap between slots
+        max_price_gap_ct: Maximum price difference within a group (ct/kWh)
+        resolution_minutes: Resolution in minutes (60 or 15)
 
     Returns:
-        Groepen gesorteerd op gemiddelde prijs (goedkoopste eerst).
+        Groups sorted by average price (cheapest first).
     """
     if not slots:
         return []
@@ -666,7 +666,7 @@ def group_consecutive_slots(
         f"max_price_gap={max_price_gap_ct}ct"
     )
 
-    # Sorteer op positie
+    # Sort by position
     sorted_slots = sorted(slots, key=lambda s: s["position"])
 
     groups = []
@@ -683,30 +683,30 @@ def group_consecutive_slots(
         prev = sorted_slots[i - 1]
         curr = sorted_slots[i]
 
-        # Bereken tijdsverschil op basis van resolutie
+        # Calculate time difference based on resolution
         position_diff = curr["position"] - prev["position"]
         time_gap_minutes = position_diff * resolution_minutes
 
-        # Bereken potentiële nieuwe min/max prijzen
+        # Calculate potential new min/max prices
         potential_min = min(current_group["min_price"], curr["ct_per_kwh"])
         potential_max = max(current_group["max_price"], curr["ct_per_kwh"])
         potential_price_gap = potential_max - potential_min
 
-        # Check beide voorwaarden
+        # Check both conditions
         can_merge = (
             time_gap_minutes <= max_gap_minutes + resolution_minutes
             and potential_price_gap <= max_price_gap_ct
         )
 
         if can_merge:
-            # Voeg toe aan huidige groep
+            # Add to current group
             current_group["end"] = curr["hour_local"]
             current_group["slots"].append(curr)
             current_group["positions"].append(curr["position"])
             current_group["min_price"] = potential_min
             current_group["max_price"] = potential_max
         else:
-            # Sla huidige groep op en start nieuwe
+            # Save current group and start new one
             groups.append(current_group)
             logger.debug(
                 f"Group completed: {current_group['start'].split()[1]} to "
@@ -721,23 +721,23 @@ def group_consecutive_slots(
                 "max_price": curr["ct_per_kwh"],
             }
 
-    # Voeg laatste groep toe
+    # Add last group
     groups.append(current_group)
     logger.debug(
         f"Group completed: {current_group['start'].split()[1]} to "
         f"{current_group['end'].split()[1]} ({len(current_group['slots'])} slots)"
     )
 
-    # Bereken gemiddelde prijs per groep
+    # Calculate average price per group
     for group in groups:
         avg_price = sum(s["ct_per_kwh"] for s in group["slots"]) / len(group["slots"])
         group["avg_price"] = avg_price
 
-    # Sorteer op gemiddelde prijs (goedkoopste eerst)
+    # Sort by average price (cheapest first)
     sorted_groups = sorted(groups, key=lambda g: g["avg_price"])
     logger.info(f"Created {len(sorted_groups)} price blocks from {len(slots)} slots")
 
-    # DEBUG: Log de eerste paar blokken
+    # DEBUG: Log the first few blocks
     if LOG_LEVEL == "DEBUG":
         for i, block in enumerate(sorted_groups[:5], 1):
             logger.debug(
@@ -753,25 +753,25 @@ def find_most_expensive_hour(
     all_slots: List[Dict], slot_date: date, resolution_minutes: int = 60
 ) -> Optional[Dict]:
     """
-    Vind het duurste aaneengesloten uur (of equivalent in 15-min slots).
+    Find the most expensive consecutive hour (or equivalent in 15-min slots).
 
-    Voor PT60M: direct het duurste slot
-    Voor PT15M: vind het duurste aaneengesloten blok van 4 slots (= 60 min)
+    For PT60M: directly the most expensive slot
+    For PT15M: find the most expensive consecutive block of 4 slots (= 60 min)
 
     Args:
-        all_slots: Alle slots van de dag
-        slot_date: Datum
-        resolution_minutes: Resolutie (60 of 15)
+        all_slots: All slots of the day
+        slot_date: Date
+        resolution_minutes: Resolution (60 or 15)
 
     Returns:
-        Dictionary met duurste uur info, of None
+        Dictionary with most expensive hour info, or None
     """
     if not all_slots:
         return None
 
     logger.debug(f"Finding most expensive hour (resolution={resolution_minutes}min)")
 
-    # Filter alleen toekomstige slots
+    # Filter only future slots
     today = date.today()
     is_today = slot_date == today
 
@@ -790,7 +790,7 @@ def find_most_expensive_hour(
         return None
 
     if resolution_minutes == 60:
-        # PT60M: gewoon het duurste slot
+        # PT60M: simply the most expensive slot
         most_expensive = max(future_slots, key=lambda s: s["ct_per_kwh"])
 
         return {
@@ -807,7 +807,7 @@ def find_most_expensive_hour(
         }
 
     else:
-        # PT15M: vind duurste aaneengesloten 60 minuten (4 slots)
+        # PT15M: find most expensive consecutive 60 minutes (4 slots)
         sorted_slots = sorted(future_slots, key=lambda s: s["position"])
 
         window_size = 4
@@ -817,7 +817,7 @@ def find_most_expensive_hour(
         for i in range(len(sorted_slots) - window_size + 1):
             window = sorted_slots[i : i + window_size]
 
-            # Check of slots aaneengesloten zijn
+            # Check if slots are consecutive
             is_consecutive = True
             for j in range(len(window) - 1):
                 if window[j + 1]["position"] - window[j]["position"] > 1:
@@ -845,7 +845,7 @@ def find_most_expensive_hour(
                 "slots": best_window,
             }
         else:
-            # Fallback: gewoon het duurste enkele slot
+            # Fallback: simply the most expensive single slot
             most_expensive = max(future_slots, key=lambda s: s["ct_per_kwh"])
             return {
                 "time_range": format_time_range(
@@ -973,10 +973,13 @@ def process_day_data(
 
     # STAP 4: Sorteer op prijs en neem top max_blocks
     selected_blocks = grouped_slots[:max_blocks]
-    logger.info(
-        f"✅ Selected top {len(selected_blocks)} blocks "
-        f"(cheapest: {selected_blocks[0]['avg_price']:.3f}ct)"
-    )
+    if selected_blocks:
+        logger.info(
+            f"✅ Selected top {len(selected_blocks)} blocks "
+            f"(cheapest: {selected_blocks[0]['avg_price']:.3f}ct)"
+        )
+    else:
+        logger.warning("⚠️ No blocks selected - empty grouped_slots")
 
     # STAP 5: Converteer naar timeblocks met correcte "verstreken" detectie
     time_blocks = []
@@ -1203,9 +1206,14 @@ def root():
         ],
         "docs": "/docs",
         "endpoints": {
-            "prices": "/energy/prices/cheapest",
+            "prices_basic": "/energy/prices/cheapest-basic",
+            "prices_advanced": "/energy/prices/cheapest-advanced",
             "dayahead": "/energy/prices/dayahead",
             "health": "/system/health",
+        },
+        "route_recommendations": {
+            "simple_use_cases": "Use /energy/prices/cheapest-basic for simple home automation",
+            "advanced_use_cases": "Use /energy/prices/cheapest-advanced for complex scenarios",
         },
         "log_level": LOG_LEVEL,
     }
@@ -1293,39 +1301,228 @@ def energy_prices_dayahead(
 
 
 @app.get(
-    "/energy/prices/cheapest",
+    "/energy/prices/cheapest-basic",
     tags=["energy"],
-    summary="Goedkoopste tijdsblokken + duurste uur om te vermijden",
+    summary="Simple cheapest hours (basic home automation)",
     description=(
-        "Intelligente tijdsblokken voor home automation:\n\n"
-        "**Ranking:**\n"
-        "- Rank 1 🥇 = Goedkoopste blok van de dag\n"
-        "- Rank 2 🥈 = Op één na goedkoopste\n"
-        "- Rank 3 🥉 = Derde goedkoopste\n"
-        "- Rank 4-12 = 4️⃣5️⃣6️⃣7️⃣8️⃣9️⃣🔟...\n"
-        "- **avoid_slot** ⚠️ = Duurste uur om te vermijden\n\n"
-        "**Features:**\n"
-        "- Analyseert alle uren van de dag\n"
-        "- **Gebruikt Nederlandse tijd (Europe/Amsterdam)** voor alle berekeningen\n"
-        "- Automatische detectie van PT60M (hourly) of PT15M (15-min) resolutie\n"
-        "- Groepeert opeenvolgende slots met vergelijkbare prijzen\n"
-        "- **Standaarddeviatie (σ)**: toont prijsspreiding binnen blok (alleen als statistisch relevant)\n"
-        "- **Avoid slot**: duurste aaneengesloten uur (voor PT15M: 4 slots = 60 min)\n"
-        "- **Slimme fallback**: verkleint automatisch max_price_gap als er te weinig blokken zijn\n"
-        "- Filtert nachtelijke slots (00:00-06:00) voor vandaag\n"
-        "- Markeert verstreken vs toekomstige slots\n"
-        "- Perfect voor laadschema's en slimme apparaten\n\n"
+        "Simple route for basic home automation:\n\n"
+        "**Functionality:**\n"
+        "- Returns the N cheapest hours of the day\n"
+        "- Optional: consecutive hours only\n"
+        "- Simple price-based sorting\n"
+        "- Fast response, minimal overhead\n"
+        "- **Uses Dutch time (Europe/Amsterdam)**\n"
+        "- Automatic detection of PT60M (hourly) or PT15M (15-min) resolution\n"
+        "- Marks past vs future hours\n\n"
+        "**Perfect for:**\n"
+        "- Simple charging schedules\n"
+        "- Basic smart devices\n"
+        "- Quick integrations\n"
+        "- When you don't need complex grouping\n\n"
         "**Parameters:**\n"
-        "- `max_blocks`: Gewenst aantal tijdsblokken (1-12)\n"
-        "- `max_time_gap`: Max minuten tussen slots in één blok (15-180)\n"
-        "- `max_price_gap`: **Maximale** prijsverschil (ct/kWh) binnen één blok (0.3-10.0)\n"
-        "- `price_threshold_pct`: Analyseer alleen slots onder dit percentiel (10-100)\n\n"
+        "- `hours`: Number of cheapest hours (1-24, default: 4)\n"
+        "- `consecutive`: Consecutive hours only (default: false)\n"
+        "- `date`: Date YYYY-MM-DD (default: today)\n"
+        "- `zone`: EIC code area (default: Netherlands)"
+    ),
+)
+def energy_prices_cheapest_basic(
+    date_str: Optional[str] = Query(
+        None,
+        alias="date",
+        description="Date YYYY-MM-DD (default: today)",
+    ),
+    zone: Optional[str] = Query(DEFAULT_ZONE, description="EIC code area"),
+    hours: int = Query(4, ge=1, le=24, description="Number of cheapest hours (1-24)"),
+    consecutive: bool = Query(False, description="Consecutive hours only"),
+):
+    """Simple cheapest hours for basic home automation."""
+    start_time = datetime.now(NL_TZ)
+
+    try:
+        # Parse datum (default: vandaag)
+        if date_str:
+            target_date = validate_date_string(date_str)
+        else:
+            target_date = date.today()
+
+        logger.info(
+            f"GET /energy/prices/cheapest-basic - date={target_date.isoformat()}, "
+            f"zone={zone}, hours={hours}, consecutive={consecutive}"
+        )
+
+        # Haal alle prijsdata op
+        all_prices = entsoe.get_day_ahead_prices(target_date, zone)
+
+        if not all_prices:
+            raise EntsoeServerError(
+                f"Geen prijsdata beschikbaar voor {target_date.isoformat()}", status=404
+            )
+
+        logger.debug(f"Fetched {len(all_prices)} total price slots")
+
+        # Detecteer resolutie
+        resolution_minutes = detect_resolution(all_prices)
+
+        # Filter nachtelijke slots voor vandaag
+        today = date.today()
+        is_today = target_date == today
+
+        if is_today:
+            filtered_slots = [
+                slot for slot in all_prices if belongs_to_today(slot["hour_local"])
+            ]
+            logger.debug(
+                f"Filtered night slots: {len(all_prices)} -> {len(filtered_slots)}"
+            )
+        else:
+            filtered_slots = all_prices
+
+        if consecutive:
+            # Vind beste aaneengesloten blok
+            sorted_slots = sorted(filtered_slots, key=lambda s: s["position"])
+
+            best_avg = float("inf")
+            best_block = []
+
+            for i in range(len(sorted_slots) - hours + 1):
+                block = sorted_slots[i : i + hours]
+
+                # Check of slots aaneengesloten zijn
+                is_consecutive_block = True
+                for j in range(len(block) - 1):
+                    if block[j + 1]["position"] - block[j]["position"] > 1:
+                        is_consecutive_block = False
+                        break
+
+                if is_consecutive_block:
+                    avg_price = sum(s["ct_per_kwh"] for s in block) / len(block)
+                    if avg_price < best_avg:
+                        best_avg = avg_price
+                        best_block = block
+
+            if best_block:
+                cheapest_hours = best_block
+            else:
+                # Fallback: gewoon de goedkoopste uren
+                cheapest_hours = sorted(filtered_slots, key=lambda s: s["ct_per_kwh"])[
+                    :hours
+                ]
+                logger.warning(
+                    "No consecutive block found, using cheapest individual hours"
+                )
+        else:
+            # Gewoon de goedkoopste uren
+            cheapest_hours = sorted(filtered_slots, key=lambda s: s["ct_per_kwh"])[
+                :hours
+            ]
+
+        # Sorteer op tijd voor output
+        cheapest_hours = sorted(cheapest_hours, key=lambda s: s["position"])
+
+        # Bereken statistieken
+        prices = [h["ct_per_kwh"] for h in cheapest_hours]
+        avg_price = sum(prices) / len(prices)
+        min_price = min(prices)
+        max_price = max(prices)
+
+        # Bereken overall dag gemiddelde
+        day_avg = sum(s["ct_per_kwh"] for s in all_prices) / len(all_prices)
+
+        # Converteer naar output format
+        result_hours = []
+        for hour in cheapest_hours:
+            is_past = is_past_slot(hour["hour_local"], target_date, resolution_minutes)
+
+            result_hours.append(
+                {
+                    "time": hour["hour_local"].split(" ")[1],  # Alleen tijd deel
+                    "time_range": format_time_range(
+                        hour["hour_local"], hour["hour_local"], resolution_minutes
+                    ),
+                    "price_ct_per_kwh": round(hour["ct_per_kwh"], 3),
+                    "is_past": is_past,
+                    "is_future": not is_past,
+                    "position": hour["position"],
+                }
+            )
+
+        execution_time = (datetime.now(NL_TZ) - start_time).total_seconds() * 1000
+
+        result = {
+            "date": target_date.isoformat(),
+            "label": get_day_label(target_date),
+            "zone": zone,
+            "hours_requested": hours,
+            "consecutive_required": consecutive,
+            "hours_found": len(result_hours),
+            "resolution_minutes": resolution_minutes,
+            "cheapest_hours": result_hours,
+            "statistics": {
+                "avg_price_ct_per_kwh": round(avg_price, 3),
+                "min_price_ct_per_kwh": round(min_price, 3),
+                "max_price_ct_per_kwh": round(max_price, 3),
+                "price_range_ct_per_kwh": round(max_price - min_price, 3),
+                "day_average_ct_per_kwh": round(day_avg, 3),
+                "savings_vs_day_avg": round(day_avg - avg_price, 3),
+            },
+            "future_hours_count": sum(1 for h in result_hours if h["is_future"]),
+            "generated_at": datetime.now(NL_TZ).isoformat(),
+            "metadata": create_metadata(
+                "energy/prices/cheapest-basic",
+                {
+                    "date": target_date.isoformat(),
+                    "zone": zone,
+                    "hours": hours,
+                    "consecutive": consecutive,
+                },
+                execution_time,
+            ),
+        }
+
+        logger.info(
+            f"Found {len(result_hours)} cheapest hours in {execution_time:.2f}ms"
+        )
+        return result
+
+    except Exception as e:
+        return error_response(e)
+
+
+@app.get(
+    "/energy/prices/cheapest-advanced",
+    tags=["energy"],
+    summary="Advanced time blocks + most expensive hour to avoid",
+    description=(
+        "Advanced intelligent time blocks for complex home automation:\n\n"
+        "**Ranking:**\n"
+        "- Rank 1 🥇 = Cheapest block of the day\n"
+        "- Rank 2 🥈 = Second cheapest\n"
+        "- Rank 3 🥉 = Third cheapest\n"
+        "- Rank 4-12 = 4️⃣5️⃣6️⃣7️⃣8️⃣9️⃣🔟...\n"
+        "- **avoid_slot** ⚠️ = Most expensive hour to avoid\n\n"
+        "**Advanced Features:**\n"
+        "- Analyzes all hours of the day\n"
+        "- **Uses Dutch time (Europe/Amsterdam)** for all calculations\n"
+        "- Automatic detection of PT60M (hourly) or PT15M (15-min) resolution\n"
+        "- Groups consecutive slots with comparable prices\n"
+        "- **Standard deviation (σ)**: shows price spread within block (only when statistically relevant)\n"
+        "- **Avoid slot**: most expensive consecutive hour (for PT15M: 4 slots = 60 min)\n"
+        "- **Smart fallback**: automatically reduces max_price_gap when too few blocks found\n"
+        "- Filters night slots (00:00-06:00) for today\n"
+        "- Marks past vs future slots\n"
+        "- Perfect for complex charging schedules and advanced smart devices\n\n"
+        "**Parameters:**\n"
+        "- `max_blocks`: Desired number of time blocks (1-12)\n"
+        "- `max_time_gap`: Max minutes between slots in one block (15-180)\n"
+        "- `max_price_gap`: **Maximum** price difference (ct/kWh) within one block (0.3-10.0)\n"
+        "- `price_threshold_pct`: Analyze only slots below this percentile (10-100)\n\n"
         "**Logging:**\n"
         "- Set LOG_LEVEL=DEBUG for detailed execution logs\n"
         "- Set LOG_LEVEL=INFO for summary logs (default)"
     ),
 )
-def energy_prices_cheapest(
+def energy_prices_cheapest_advanced(
     date_str: Optional[str] = Query(
         None,
         alias="date",

@@ -1,21 +1,21 @@
 # ENTSO-E Day-Ahead Energy Prices API
 
-## Overzicht
+## Overview
 
-Deze applicatie biedt een REST API en CLI-tool voor het ophalen van Europese energieprijzen via de ENTSO‑E Transparency Platform. Het project is ontworpen voor integratie met home automation systemen en slimme energiemanagement.
+This application provides a REST API and CLI tool for retrieving European energy prices via the ENTSO‑E Transparency Platform. The project is designed for integration with home automation systems and smart energy management.
 
-## Project Structuur
+## Project Structure
 
 ```
 ├── api_server.py           # FastAPI REST server
-├── ha_entsoe.py           # CLI tool en core functionaliteit
+├── ha_entsoe.py           # CLI tool and core functionality
 ├── requirements.txt       # Python dependencies
-├── Dockerfile            # Container configuratie
+├── Dockerfile            # Container configuration
 ├── docker-compose.yml    # Docker Compose setup
-├── .env                  # Environment variabelen (API keys)
-├── .gitignore           # Git ignore regels
-├── pytest.ini          # Test configuratie
-├── logging.json         # Logging configuratie
+├── .env                  # Environment variables (API keys)
+├── .gitignore           # Git ignore rules
+├── pytest.ini          # Test configuration
+├── logging.json         # Logging configuration
 ├── tests/               # Test suite
 │   ├── __init__.py
 │   ├── conftest.py
@@ -25,257 +25,329 @@ Deze applicatie biedt een REST API en CLI-tool voor het ophalen van Europese ene
 │   └── ci.yml
 ├── cache/              # API response cache
 ├── data/               # Processed data storage
-└── ENTSO‑E codes.md    # Referentie voor land/zone codes
+└── ENTSO‑E codes.md    # Reference for country/zone codes
 ```
 
-## Belangrijkste Features
+## Key Features
 
-- **REST API**: FastAPI-gebaseerde web service voor energieprijzen
-- **CLI Tool**: Command-line interface voor directe data toegang
-- **Caching**: Intelligente caching van API responses
+- **REST API**: FastAPI-based web service for energy prices
+- **CLI Tool**: Command-line interface for direct data access
+- **Caching**: Intelligent caching of API responses
 - **Docker Support**: Containerized deployment
-- **Automated Testing**: Comprehensive test suite met pytest
-- **CI/CD Pipeline**: GitHub Actions voor automated testing en deployment
-- **Environment Configuration**: .env support voor API keys
-- **Timezone Handling**: Correcte verwerking van CET/CEST en 23/24/25-uur dagen
-- **Rate Limiting**: Respect voor ENTSO-E API limits met exponential backoff
-- **Data Normalization**: Eenvormige units en tijdafhandeling
-- **Fallback Mechanisms**: Robuuste error handling bij missende data
+- **Automated Testing**: Comprehensive test suite with pytest
+- **CI/CD Pipeline**: GitHub Actions for automated testing and deployment
+- **Environment Configuration**: .env support for API keys
+- **Timezone Handling**: Correct processing of CET/CEST and 23/24/25-hour days
+- **Rate Limiting**: Respect for ENTSO-E API limits with exponential backoff
+- **Data Normalization**: Uniform units and time handling
+- **Fallback Mechanisms**: Robust error handling for missing data
 
 ## REST API
 
-De FastAPI server biedt een web interface voor het ophalen van energieprijzen:
+The FastAPI server provides a web interface for retrieving energy prices:
 
 ### API Endpoints
 
-- `GET /` - API documentatie en status
-- `GET /prices/{country_code}` - Day-ahead prijzen voor specifiek land
+- `GET /` - API documentation and status
+- `GET /energy/prices/dayahead` - Day-ahead prices for specific country
+- `GET /energy/prices/cheapest` - Cheapest hours analysis
 - `GET /health` - Health check endpoint
 
-### API Server Starten
+### Starting the API Server
 
 ```bash
-# Lokaal
+# Local
 python api_server.py
 
-# Met Docker
+# With Docker
 docker-compose up
 
-# Development mode met auto-reload
+# Development mode with auto-reload
 uvicorn api_server:app --reload --host 0.0.0.0 --port 8000
 ```
 
-De API is beschikbaar op `http://localhost:8000` met automatische documentatie op `/docs`.
+The API is available at `http://localhost:8000` with automatic documentation at `/docs`.
 
 ## Testing
 
-Het project bevat een uitgebreide test suite voor zowel de CLI tool als de REST API.
+The project contains a comprehensive test suite for both the CLI tool and the REST API.
 
-### Test Suite Uitvoeren
+### Running the Test Suite
 
 ```bash
-# Alle tests
+# All tests
 pytest
 
-# Met coverage
+# With coverage
 pytest --cov=. --cov-report=html
 
-# Specifieke test file
+# Specific test file
 pytest tests/test_api_server.py
 
 # Verbose output
 pytest -v
 ```
 
-### Test Structuur
+### Test Structure
 
 - `tests/test_api_server.py` - REST API endpoint tests
-- `tests/test_ha_entsoe.py` - CLI tool en core functionaliteit tests
-- `tests/conftest.py` - Shared test fixtures en configuratie
+- `tests/test_ha_entsoe.py` - CLI tool and core functionality tests
+- `tests/conftest.py` - Shared test fixtures and configuration
 
 ### CI/CD Pipeline
 
-GitHub Actions workflow voor automated testing:
+GitHub Actions workflow for automated testing:
 
-- Runs op elke push en pull request
-- Test tegen Python 3.9, 3.10, 3.11
-- Includes linting en code quality checks
-- Automated deployment bij successful tests
+- Runs on every push and pull request
+- Tests against Python 3.9, 3.10, 3.11
+- Includes linting and code quality checks
+- Automated deployment on successful tests
 
-## Systeemvereisten
+## System Requirements
 
 - Python 3.9+
-- Internettoegang
-- ENTSO‑E API‑sleutel (securityToken)
+- Internet access
+- ENTSO‑E API key (securityToken)
 
-Installatie
+## Installation
 
-- pip install python-dotenv requests python-dateutil pytz
-- Maak een .env in de projectmap:
-  ENTSOE_API_KEY=jouw_security_token
+```bash
+pip install python-dotenv requests python-dateutil pytz
+```
 
-EIC-codes (Nederland + directe buren voor exchanges)
+Create a `.env` file in the project directory:
 
-- NL (Nederland, bidding zone): 10YNL----------L
-- BE (België, voor NL↔BE exchanges): 10YBE----------2
-- DE‑LU (Duitsland‑Luxemburg, voor NL↔DE exchanges): 10Y1001A1001A83F
+```
+ENTSOE_API_KEY=your_security_token
+```
 
-Let op: Deze tool is NL‑georiënteerd; gebruik 10YNL----------L als standaard zone. Voor exchanges kun je NL combineren met BE of DE‑LU.
+## EIC Codes (Netherlands + Direct Neighbors for Exchanges)
 
-Gebruik
+- NL (Netherlands, bidding zone): `10YNL----------L`
+- BE (Belgium, for NL↔BE exchanges): `10YBE----------2`
+- DE‑LU (Germany‑Luxembourg, for NL↔DE exchanges): `10Y1001A1001A83F`
 
-- Algemene vorm:
-  python ha_entsoe.py command [args]
+Note: This tool is NL-oriented; use `10YNL----------L` as default zone. For exchanges you can combine NL with BE or DE‑LU.
 
-Commands
+## Usage
 
-- prices [YYYY-MM-DD] [ZONeEIC]
-  Day‑Ahead prijzen (standaard: morgen, zone NL)
-  Voorbeeld:
+General form:
 
-  - python ha_entsoe.py prices
-  - python ha_entsoe.py prices 2025-10-07 10YNL----------L
+```bash
+python ha_entsoe.py command [args]
+```
 
-- load [YYYY-MM-DD] [ZONeEIC]
-  Total Load Day‑Ahead (A65) en Actual (A68)
-  Voorbeeld:
+### Commands
 
-  - python ha_entsoe.py load 2025-10-07 10YNL----------L
+#### prices [YYYY-MM-DD] [ZONE_EIC]
 
-- gen-forecast [YYYY-MM-DD] [ZONeEIC] [psrType...]
-  Generation Forecasts (A69) met optionele psrType‑filters
-  Voorbeelden:
+Day‑Ahead prices (default: tomorrow, zone NL)
 
-  - Alle types in één call (NL):
-    python ha_entsoe.py gen-forecast 2025-10-07 10YNL----------L
-  - Alleen Solar (PV):
-    python ha_entsoe.py gen-forecast 2025-10-07 10YNL----------L B16
-  - Wind Onshore + Offshore + Solar:
-    python ha_entsoe.py gen-forecast 2025-10-07 10YNL----------L B19 B18 B16
+Examples:
 
-  Veelgebruikte psrType-codes:
+```bash
+python ha_entsoe.py prices
+python ha_entsoe.py prices 2025-10-07 10YNL----------L
+```
 
-  - B16: Solar (Photovoltaic)
-  - B18: Wind Offshore
-  - B19: Wind Onshore
+#### load [YYYY-MM-DD] [ZONE_EIC]
 
-- netpos [YYYY-MM-DD] [ZONeEIC]
-  Net Position (A75: import/export)
-  Voorbeeld:
+Total Load Day‑Ahead (A65) and Actual (A68)
 
-  - python ha_entsoe.py netpos 2025-10-07 10YNL----------L
+Example:
 
-- exchanges [YYYY-MM-DD] FROMEIC TOEIC
-  Scheduled Commercial Exchanges (A01) voor NL↔BE of NL↔DE‑LU
-  Voorbeelden:
+```bash
+python ha_entsoe.py load 2025-10-07 10YNL----------L
+```
 
-  - NL → BE:
-    python ha_entsoe.py exchanges 2025-10-07 10YNL----------L 10YBE----------2
-  - NL → DE‑LU:
-    python ha_entsoe.py exchanges 2025-10-07 10YNL----------L 10Y1001A1001A83F
+#### gen-forecast [YYYY-MM-DD] [ZONE_EIC] [psrType...]
 
-- plan [YYYY-MM-DD] [ZONeEIC]
-  Voorbeeld beslisregels op basis van prijzen (percentiel), load en wind/zon:
-  - python ha_entsoe.py plan
-  - python ha_entsoe.py plan 2025-10-07 10YNL----------L
+Generation Forecasts (A69) with optional psrType filters
 
-Run-loop (continumodus)
+Examples:
 
-- Start:
-  python ha_entsoe.py run-loop
+```bash
+# All types in one call (NL):
+python ha_entsoe.py gen-forecast 2025-10-07 10YNL----------L
 
-- Handige opties:
-  - --zone 10YNL----------L
-  - --from 10YNL----------L --to 10YBE----------2
-  - --prices-ttl 86400 --load-da-ttl 86400 --load-act-ttl 900 --gen-ttl 10800 --netpos-ttl 3600 --exch-ttl 10800
-  - --tick 5 (hoofdloop-slaap in seconden)
+# Solar only (PV):
+python ha_entsoe.py gen-forecast 2025-10-07 10YNL----------L B16
 
-Voorbeelden
+# Wind Onshore + Offshore + Solar:
+python ha_entsoe.py gen-forecast 2025-10-07 10YNL----------L B19 B18 B16
+```
 
-- Basis NL-run (met BE-exchanges):
-  python ha_entsoe.py run-loop --zone 10YNL----------L --from 10YNL----------L --to 10YBE----------2
-- Actuele load frequenter (elke 10 min):
-  python ha_entsoe.py run-loop --load-act-ttl 600
+Common psrType codes:
 
-Datasets en parameters (conform ENTSO‑E API)
+- B16: Solar (Photovoltaic)
+- B18: Wind Offshore
+- B19: Wind Onshore
 
-- Day-Ahead Prices (A44)
-  - Params: documentType=A44, in_Domain=10YNL----------L, out_Domain=10YNL----------L, periodStart/End
-  - Unit: EUR/MWh (omgerekend naar ct/kWh)
-- Total Load – Day Ahead (A65)
-  - Params: documentType=A65, outBiddingZone_Domain=10YNL----------L, processType=A01, periodStart/End
-  - Unit: MWh per uur
-- Total Load – Actual (A68)
-  - Params: documentType=A68, outBiddingZone_Domain=10YNL----------L, periodStart/End
-  - Unit: MWh per uur
-- Generation Forecasts (A69) met psrType
-  - Params: documentType=A69, processType=A01, in_Domain=out_Domain=10YNL----------L, periodStart/End
-  - Optioneel: psrType in de query (B16, B18, B19). Met meerdere psrType’s doet de tool meerdere API‑calls en merge’t de resultaten.
-  - Unit: MW
-- Net Position (A75)
-  - Params: documentType=A75, in_Domain=out_Domain=10YNL----------L, periodStart/End
-  - Interpretatie: positief ≈ export, negatief ≈ import (verifieer lokaal)
-- Scheduled Commercial Exchanges (A01)
-  - Params: documentType=A01, in_Domain=FROM, out_Domain=TO, periodStart/End
-  - Richting NL→BE of NL→DE‑LU (omkeren geeft de tegengestelde stroom)
+#### netpos [YYYY-MM-DD] [ZONE_EIC]
 
-Tijd en tijdzones
+Net Position (A75: import/export)
 
-- ENTSO‑E gebruikt CET/CEST (Europe/Brussels).
-- periodStart/periodEnd-formaat: yyyymmddhhmm.
-- Een leverdag kan 23/24/25 tijdslots hebben door zomer‑/wintertijd. De tool koppelt posities aan lokale uren en verwerkt dit automatisch.
+Example:
 
-psrType-filters: waarom en hoe
+```bash
+python ha_entsoe.py netpos 2025-10-07 10YNL----------L
+```
 
-- Waarom filteren?
-  - Minder payload en snellere responses.
-  - Focus op relevante “groene uren” (wind/zon).
-- Hoe gebruiken?
-  - Voeg één of meerdere psrType-codes toe na datum en EIC:
-    - python ha_entsoe.py gen-forecast 2025-10-07 10YNL----------L B16 B18 B19
-- Standaard in ‘plan’:
-  - De plan‑logica gebruikt B16, B18, B19 om “groene uren” te bepalen (sommen van MW).
+#### exchanges [YYYY-MM-DD] FROM_EIC TO_EIC
 
-Beste praktijken (rate limits en stabiliteit)
+Scheduled Commercial Exchanges (A01) for NL↔BE or NL↔DE‑LU
 
-- Caching en TTL’s:
-  - A44/A65/A69: 1–4x per dag is genoeg (bijv. vlak na publicatie rond 13:00–15:00 CET/CEST)
-  - A68 (Actual): elke 5–30 min (start met 15 min)
-  - A75 (Net Position): elke ~60 min
-  - A01 (Exchanges): elke 1–6 uur
-- Jitter en backoff:
-  - De run‑loop voegt jitter toe en heeft exponentiële backoff bij fouten/429’s.
-- Fallbacks:
-  - Bij missende punten gebruikt de tool veilige defaults (hoge prijs, 0 MW, etc.).
+Examples:
 
-Veelgestelde vragen
+```bash
+# NL → BE:
+python ha_entsoe.py exchanges 2025-10-07 10YNL----------L 10YBE----------2
 
-- Wanneer zijn day‑ahead prijzen beschikbaar?
-  - Meestal tussen 13:00 en 15:00 CET/CEST voor de volgende dag.
-- Waarom zie ik 23 of 25 uren?
-  - Zomertijdschakeling. De tool mapt posities naar lokale uren.
-- Net Position lijkt “omgekeerd”?
-  - Controleer een sampledag of import/export‑definities in jouw use‑case en documenteer de conventie.
+# NL → DE‑LU:
+python ha_entsoe.py exchanges 2025-10-07 10YNL----------L 10Y1001A1001A83F
+```
 
-Probleemoplossing
+#### plan [YYYY-MM-DD] [ZONE_EIC]
 
-- “ENTSOE_API_KEY ontbreekt”
-  - Controleer .env en environment.
-- HTTP 429 Too Many Requests
-  - Verhoog TTL’s, verlaag polling, of gebruik run‑loop met jitter; plan calls verspreid.
-- “Geen TimeSeries gevonden”
-  - Publicatie nog niet beschikbaar, verkeerd tijdvenster of parameters. Probeer later of vergroot je window.
+Example decision rules based on prices (percentile), load and wind/solar:
 
-Licentie en bronvermelding
+```bash
+python ha_entsoe.py plan
+python ha_entsoe.py plan 2025-10-07 10YNL----------L
+```
 
-- Data: ENTSO‑E Transparency Platform. Respecteer de Terms & Conditions.
-- Vermeld “Source: ENTSO‑E Transparency Platform” in UI’s/exports waar van toepassing.
+### Run-loop (Continuous Mode)
 
-Changelog (beknopt)
+Start:
 
-- v1.1: psrType‑filters (A69), uitgebreide README (NL), NL‑focus.
-- v1.0: Run‑loop, caching, plan‑heuristiek, CLI‑commands.
+```bash
+python ha_entsoe.py run-loop
+```
 
-Contact en uitbreidingen
+Useful options:
 
-- Wil je extra NL‑datapunten (balancingprijzen, outages) of meer automatiseringsregels? Open een issue of deel je wensen.
+- `--zone 10YNL----------L`
+- `--from 10YNL----------L --to 10YBE----------2`
+- `--prices-ttl 86400 --load-da-ttl 86400 --load-act-ttl 900 --gen-ttl 10800 --netpos-ttl 3600 --exch-ttl 10800`
+- `--tick 5` (main loop sleep in seconds)
+
+Examples:
+
+```bash
+# Basic NL run (with BE exchanges):
+python ha_entsoe.py run-loop --zone 10YNL----------L --from 10YNL----------L --to 10YBE----------2
+
+# Actual load more frequently (every 10 min):
+python ha_entsoe.py run-loop --load-act-ttl 600
+```
+
+## Datasets and Parameters (According to ENTSO‑E API)
+
+### Day-Ahead Prices (A44)
+
+- Params: documentType=A44, in_Domain=10YNL----------L, out_Domain=10YNL----------L, periodStart/End
+- Unit: EUR/MWh (converted to ct/kWh)
+
+### Total Load – Day Ahead (A65)
+
+- Params: documentType=A65, outBiddingZone_Domain=10YNL----------L, processType=A01, periodStart/End
+- Unit: MWh per hour
+
+### Total Load – Actual (A68)
+
+- Params: documentType=A68, outBiddingZone_Domain=10YNL----------L, periodStart/End
+- Unit: MWh per hour
+
+### Generation Forecasts (A69) with psrType
+
+- Params: documentType=A69, processType=A01, in_Domain=out_Domain=10YNL----------L, periodStart/End
+- Optional: psrType in query (B16, B18, B19). With multiple psrTypes the tool makes multiple API calls and merges results.
+- Unit: MW
+
+### Net Position (A75)
+
+- Params: documentType=A75, in_Domain=out_Domain=10YNL----------L, periodStart/End
+- Interpretation: positive ≈ export, negative ≈ import (verify locally)
+
+### Scheduled Commercial Exchanges (A01)
+
+- Params: documentType=A01, in_Domain=FROM, out_Domain=TO, periodStart/End
+- Direction NL→BE or NL→DE‑LU (reverse gives opposite flow)
+
+## Time and Timezones
+
+- ENTSO‑E uses CET/CEST (Europe/Brussels).
+- periodStart/periodEnd format: yyyymmddhhmm.
+- A delivery day can have 23/24/25 time slots due to summer/winter time. The tool maps positions to local hours and processes this automatically.
+
+## psrType Filters: Why and How
+
+### Why Filter?
+
+- Less payload and faster responses.
+- Focus on relevant "green hours" (wind/solar).
+
+### How to Use?
+
+Add one or more psrType codes after date and EIC:
+
+```bash
+python ha_entsoe.py gen-forecast 2025-10-07 10YNL----------L B16 B18 B19
+```
+
+### Default in 'plan':
+
+The plan logic uses B16, B18, B19 to determine "green hours" (sums of MW).
+
+## Best Practices (Rate Limits and Stability)
+
+### Caching and TTLs:
+
+- A44/A65/A69: 1–4x per day is enough (e.g. just after publication around 13:00–15:00 CET/CEST)
+- A68 (Actual): every 5–30 min (start with 15 min)
+- A75 (Net Position): every ~60 min
+- A01 (Exchanges): every 1–6 hours
+
+### Jitter and Backoff:
+
+- The run‑loop adds jitter and has exponential backoff on errors/429s.
+
+### Fallbacks:
+
+- For missing points the tool uses safe defaults (high price, 0 MW, etc.).
+
+## Frequently Asked Questions
+
+**When are day‑ahead prices available?**
+Usually between 13:00 and 15:00 CET/CEST for the next day.
+
+**Why do I see 23 or 25 hours?**
+Daylight saving time transition. The tool maps positions to local hours.
+
+**Net Position seems "reversed"?**
+Check a sample day or import/export definitions in your use‑case and document the convention.
+
+## Troubleshooting
+
+**"ENTSOE_API_KEY missing"**
+Check .env and environment.
+
+**HTTP 429 Too Many Requests**
+Increase TTLs, lower polling, or use run‑loop with jitter; plan calls spread out.
+
+**"No TimeSeries found"**
+Publication not yet available, wrong time window or parameters. Try later or expand your window.
+
+## License and Attribution
+
+- Data: ENTSO‑E Transparency Platform. Respect the Terms & Conditions.
+- Mention "Source: ENTSO‑E Transparency Platform" in UIs/exports where applicable.
+
+## Changelog (Brief)
+
+- v1.1: psrType‑filters (A69), extended README (NL), NL‑focus.
+- v1.0: Run‑loop, caching, plan‑heuristic, CLI‑commands.
+
+## Contact and Extensions
+
+Want additional NL data points (balancing prices, outages) or more automation rules? Open an issue or share your wishes.

@@ -102,6 +102,9 @@ def getenv_bool(name: str, default: bool) -> bool:
 
 # Basisconfig
 API_ENDPOINT = "https://web-api.tp.entsoe.eu/api"
+
+# API_ENDPOINT = "https://newtransparency.entsoe.eu/market/energyPrices/load"
+
 ZONE_EIC_DEFAULT = getenv_str("ZONE_EIC", "10YNL----------L")
 TIME_ZONE_NAME = getenv_str("TIME_ZONE", "Europe/Amsterdam")
 TZ_LOCAL = tz.gettz(TIME_ZONE_NAME)

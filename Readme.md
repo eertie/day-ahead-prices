@@ -1,26 +1,108 @@
-# ENSTO-E integratie voor Home Automation
+# ENTSO-E Day-Ahead Energy Prices API
 
-Overzicht
+## Overzicht
 
-- Deze tool haalt data op uit de ENTSO‑E Transparency Platform REST API voor Nederland en gebruikt die voor slimme automatiseringen in huis (laden EV, boiler, warmtepomp, batterij).
-- Gericht op de belangrijkste datasets: prijzen, vraag (load), wind/zon-forecast, netpositie en geplande uitwisselingen.
-- Ontworpen met caching, backoff en duidelijke units/tijdafhandeling (CET/CEST).
+Deze applicatie biedt een REST API en CLI-tool voor het ophalen van Europese energieprijzen via de ENTSO‑E Transparency Platform. Het project is ontworpen voor integratie met home automation systemen en slimme energiemanagement.
 
-Belangrijkste features
+## Project Structuur
 
-- .env support (ENTSOE_API_KEY)
-- Europe/Brussels tijdzone; correcte verwerking van 23/24/25‑uur dagen
-- Retries met exponentiële backoff
-- Eenvormige normalisatie van units en tijd
-- Day‑ahead caching per dag (in ./cache/)
-- Pollingrichtlijnen voor actuals; respect voor rate limits
-- Fallbacks bij missende punten
-- Percentiel‑heuristieken voor automation (goedkoopste/groene uren)
-- Ingebouwde run‑loop met instelbare pollingintervallen en jitter
-- psrType‑filters voor A69 (bijv. B16=Solar, B18=Wind Offshore, B19=Wind Onshore)
-- Losse CLI‑commands voor elk datasettype
+```
+├── api_server.py           # FastAPI REST server
+├── ha_entsoe.py           # CLI tool en core functionaliteit
+├── requirements.txt       # Python dependencies
+├── Dockerfile            # Container configuratie
+├── docker-compose.yml    # Docker Compose setup
+├── .env                  # Environment variabelen (API keys)
+├── .gitignore           # Git ignore regels
+├── pytest.ini          # Test configuratie
+├── logging.json         # Logging configuratie
+├── tests/               # Test suite
+│   ├── __init__.py
+│   ├── conftest.py
+│   ├── test_api_server.py
+│   └── test_ha_entsoe.py
+├── .github/workflows/   # CI/CD pipeline
+│   └── ci.yml
+├── cache/              # API response cache
+├── data/               # Processed data storage
+└── ENTSO‑E codes.md    # Referentie voor land/zone codes
+```
 
-Systeemvereisten
+## Belangrijkste Features
+
+- **REST API**: FastAPI-gebaseerde web service voor energieprijzen
+- **CLI Tool**: Command-line interface voor directe data toegang
+- **Caching**: Intelligente caching van API responses
+- **Docker Support**: Containerized deployment
+- **Automated Testing**: Comprehensive test suite met pytest
+- **CI/CD Pipeline**: GitHub Actions voor automated testing en deployment
+- **Environment Configuration**: .env support voor API keys
+- **Timezone Handling**: Correcte verwerking van CET/CEST en 23/24/25-uur dagen
+- **Rate Limiting**: Respect voor ENTSO-E API limits met exponential backoff
+- **Data Normalization**: Eenvormige units en tijdafhandeling
+- **Fallback Mechanisms**: Robuuste error handling bij missende data
+
+## REST API
+
+De FastAPI server biedt een web interface voor het ophalen van energieprijzen:
+
+### API Endpoints
+
+- `GET /` - API documentatie en status
+- `GET /prices/{country_code}` - Day-ahead prijzen voor specifiek land
+- `GET /health` - Health check endpoint
+
+### API Server Starten
+
+```bash
+# Lokaal
+python api_server.py
+
+# Met Docker
+docker-compose up
+
+# Development mode met auto-reload
+uvicorn api_server:app --reload --host 0.0.0.0 --port 8000
+```
+
+De API is beschikbaar op `http://localhost:8000` met automatische documentatie op `/docs`.
+
+## Testing
+
+Het project bevat een uitgebreide test suite voor zowel de CLI tool als de REST API.
+
+### Test Suite Uitvoeren
+
+```bash
+# Alle tests
+pytest
+
+# Met coverage
+pytest --cov=. --cov-report=html
+
+# Specifieke test file
+pytest tests/test_api_server.py
+
+# Verbose output
+pytest -v
+```
+
+### Test Structuur
+
+- `tests/test_api_server.py` - REST API endpoint tests
+- `tests/test_ha_entsoe.py` - CLI tool en core functionaliteit tests
+- `tests/conftest.py` - Shared test fixtures en configuratie
+
+### CI/CD Pipeline
+
+GitHub Actions workflow voor automated testing:
+
+- Runs op elke push en pull request
+- Test tegen Python 3.9, 3.10, 3.11
+- Includes linting en code quality checks
+- Automated deployment bij successful tests
+
+## Systeemvereisten
 
 - Python 3.9+
 - Internettoegang

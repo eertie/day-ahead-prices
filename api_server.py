@@ -9,10 +9,13 @@ import math
 import logging
 from datetime import date, datetime, timedelta
 from typing import List, Optional, Dict, Any
+import traceback
 
 import pytz
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 import uvicorn
 
 # ============================================================================
@@ -50,6 +53,7 @@ logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
+    force=True,
 )
 
 logger = logging.getLogger("entsoe_api")
@@ -86,30 +90,144 @@ app = FastAPI(
 )
 
 # ============================================================================
+# MIDDLEWARE & EXCEPTION HANDLERS
+# ============================================================================
+
+
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    """Log all requests with timing and error tracking"""
+    start_time = datetime.now(NL_TZ)
+    request_id = f"req_{int(start_time.timestamp())}"
+
+    # Log request
+    logger.info(
+        f"[{request_id}] {request.method} {request.url.path} "
+        f"from {request.client.host if request.client else 'unknown'}"
+    )
+
+    try:
+        response = await call_next(request)
+
+        # Calculate execution time
+        execution_time = (datetime.now(NL_TZ) - start_time).total_seconds() * 1000
+
+        # Log response
+        logger.info(
+            f"[{request_id}] Response: {response.status_code} "
+            f"in {execution_time:.2f}ms"
+        )
+
+        # Add request ID to response headers
+        response.headers["X-Request-ID"] = request_id
+
+        return response
+
+    except ValueError as e:
+        # Handle validation errors (like date format) with proper status code
+        execution_time = (datetime.now(NL_TZ) - start_time).total_seconds() * 1000
+        logger.warning(
+            f"[{request_id}] Validation error after {execution_time:.2f}ms: {str(e)}"
+        )
+        return error_response(e, request_id)
+    except Exception as e:
+        execution_time = (datetime.now(NL_TZ) - start_time).total_seconds() * 1000
+        logger.error(
+            f"[{request_id}] Request failed after {execution_time:.2f}ms: {str(e)}"
+        )
+        return error_response(e, request_id)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle FastAPI validation errors"""
+    request_id = request.headers.get(
+        "X-Request-ID", f"err_{int(datetime.now().timestamp())}"
+    )
+
+    logger.warning(f"[{request_id}] Validation error: {exc}")
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "VALIDATION_ERROR",
+            "message": "Invalid request parameters",
+            "details": exc.errors(),
+            "error_id": request_id,
+            "timestamp": datetime.now(NL_TZ).isoformat(),
+        },
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle FastAPI HTTP exceptions"""
+    request_id = request.headers.get(
+        "X-Request-ID", f"err_{int(datetime.now().timestamp())}"
+    )
+
+    logger.warning(f"[{request_id}] HTTP exception: {exc.status_code} - {exc.detail}")
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": "HTTP_ERROR",
+            "message": exc.detail,
+            "status": exc.status_code,
+            "error_id": request_id,
+            "timestamp": datetime.now(NL_TZ).isoformat(),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Handle all other unhandled exceptions"""
+    request_id = request.headers.get(
+        "X-Request-ID", f"err_{int(datetime.now().timestamp())}"
+    )
+
+    logger.error(f"[{request_id}] Unhandled exception: {str(exc)}", exc_info=True)
+
+    return error_response(exc, request_id)
+
+
+# ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
 
-def error_response(e):
-    """Helper function to create consistent error responses"""
+def error_response(e, request_id: Optional[str] = None):
+    """Helper function to create consistent error responses with enhanced logging"""
+    error_id = request_id or f"err_{int(datetime.now().timestamp())}"
+
     if isinstance(e, EntsoeServerError):
         error_msg = str(e)
+        status_code = getattr(e, "status", 502)
+        error_code = getattr(e, "code", "SERVER_ERROR")
+
         logger.error(
-            f"ENTSO-E server error: {error_msg} "
-            f"(status={getattr(e, 'status', 502)}, code={getattr(e, 'code', 'SERVER_ERROR')})"
+            f"[{error_id}] ENTSO-E server error: {error_msg} "
+            f"(status={status_code}, code={error_code})"
         )
+
         return JSONResponse(
-            status_code=getattr(e, "status", 502),
+            status_code=status_code,
             content={
                 "error": "ENTSO-E API error",
                 "message": error_msg,
-                "status": getattr(e, "status", 502),
-                "code": getattr(e, "code", "SERVER_ERROR"),
+                "status": status_code,
+                "code": error_code,
+                "error_id": error_id,
+                "timestamp": datetime.now(NL_TZ).isoformat(),
             },
         )
     elif isinstance(e, EntsoeError):
         error_msg = str(e)
-        logger.error(f"ENTSO-E error: {error_msg} (status={e.status}, code={e.code})")
+        logger.error(
+            f"[{error_id}] ENTSO-E error: {error_msg} (status={e.status}, code={e.code})"
+        )
+
         return JSONResponse(
             status_code=e.status,
             content={
@@ -118,19 +236,94 @@ def error_response(e):
                 "status": e.status,
                 "code": e.code,
                 "details": e.details,
+                "error_id": error_id,
+                "timestamp": datetime.now(NL_TZ).isoformat(),
+            },
+        )
+    elif isinstance(e, ValueError) and (
+        "Invalid isoformat string" in str(e) or "Invalid date format" in str(e)
+    ):
+        # Handle date parsing errors specifically
+        error_msg = str(e)
+        logger.warning(f"[{error_id}] Date validation error: {error_msg}")
+
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": "VALIDATION_ERROR",
+                "message": error_msg,
+                "status": 422,
+                "code": "INVALID_DATE_FORMAT",
+                "error_id": error_id,
+                "timestamp": datetime.now(NL_TZ).isoformat(),
             },
         )
     else:
         error_msg = str(e)
-        logger.error(f"Unexpected error: {error_msg}", exc_info=True)
+        logger.error(f"[{error_id}] Unexpected error: {error_msg}", exc_info=True)
+
+        # Include stack trace in debug mode
+        debug_info = {}
+        if LOG_LEVEL == "DEBUG":
+            debug_info["traceback"] = traceback.format_exc()
+
         return JSONResponse(
             status_code=500,
             content={
-                "error": "Unexpected error",
+                "error": "INTERNAL_SERVER_ERROR",
                 "message": error_msg,
                 "type": type(e).__name__,
+                "error_id": error_id,
+                "timestamp": datetime.now(NL_TZ).isoformat(),
+                **debug_info,
             },
         )
+
+
+def validate_date_string(date_str: str) -> date:
+    """Validate and parse date string with better error messages"""
+    if not date_str:
+        raise ValueError("Date parameter is required")
+
+    try:
+        parsed_date = date.fromisoformat(date_str)
+
+        # Check if date is reasonable (not too far in past/future)
+        today = date.today()
+        min_date = today - timedelta(days=365)  # 1 year ago
+        max_date = today + timedelta(days=7)  # 1 week ahead
+
+        if parsed_date < min_date:
+            raise ValueError(
+                f"Date {date_str} is too far in the past (minimum: {min_date})"
+            )
+        if parsed_date > max_date:
+            raise ValueError(
+                f"Date {date_str} is too far in the future (maximum: {max_date})"
+            )
+
+        return parsed_date
+    except ValueError as e:
+        if "Invalid isoformat string" in str(e):
+            raise ValueError(
+                f"Invalid date format '{date_str}'. Please use YYYY-MM-DD format (e.g., 2023-10-28)"
+            )
+        raise
+
+
+def validate_zone_code(zone: str) -> str:
+    """Validate EIC zone code format"""
+    if not zone:
+        raise ValueError("Zone parameter is required")
+
+    # Basic EIC code validation (should be 16 characters, start with digits)
+    if len(zone) != 16:
+        raise ValueError(f"Invalid EIC zone code '{zone}'. Must be 16 characters long")
+
+    if not zone[:2].isdigit():
+        raise ValueError(f"Invalid EIC zone code '{zone}'. Must start with 2 digits")
+
+    return zone
 
 
 def create_metadata(
@@ -1058,15 +1251,16 @@ def energy_prices_dayahead(
 
     try:
         # Parse datum (default: morgen)
-        target_date = (
-            date.fromisoformat(date_str)
-            if date_str
-            else date.today() + timedelta(days=1)
-        )
+        if date_str:
+            target_date = validate_date_string(date_str)
+        else:
+            target_date = date.today() + timedelta(days=1)
 
         logger.info(
             f"GET /energy/prices/dayahead - date={target_date.isoformat()}, zone={zone}"
         )
+
+        print(target_date)
 
         rows = entsoe.get_day_ahead_prices(target_date, zone)
 
@@ -1078,8 +1272,7 @@ def energy_prices_dayahead(
             f"Fetched {len(rows)} price slots ({resolution}min resolution) "
             f"in {execution_time:.2f}ms"
         )
-
-        return {
+        result = {
             "date": target_date.isoformat(),
             "zone": zone,
             "prices": rows,
@@ -1091,6 +1284,10 @@ def energy_prices_dayahead(
                 execution_time,
             ),
         }
+
+        print(result)
+        return result
+
     except Exception as e:
         return error_response(e)
 
@@ -1159,7 +1356,10 @@ def energy_prices_cheapest(
 
     try:
         # Parse datum (default: vandaag)
-        target_date = date.fromisoformat(date_str) if date_str else date.today()
+        if date_str:
+            target_date = validate_date_string(date_str)
+        else:
+            target_date = date.today()
 
         logger.info(
             f"GET /energy/prices/cheapest - date={target_date.isoformat()}, "

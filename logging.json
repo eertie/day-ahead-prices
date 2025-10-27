@@ -11,40 +11,55 @@
       "datefmt": "%Y-%m-%d %H:%M:%S"
     }
   },
+  "filters": {
+    "only_uvicorn_access": {
+      "()": "logging.Filter",
+      "name": "uvicorn.access"
+    },
+    "exclude_uvicorn_access": {
+      "()": "logging.Filter",
+      "name": "uvicorn.access",
+      "invert": true
+    }
+  },
   "handlers": {
-    "default": {
+    "standard_stdout": {
       "class": "logging.StreamHandler",
+      "level": "INFO",
       "formatter": "standard",
+      "filters": ["exclude_uvicorn_access"],
       "stream": "ext://sys.stdout"
     },
-    "access": {
+    "access_stdout": {
       "class": "logging.StreamHandler",
+      "level": "INFO",
       "formatter": "access",
+      "filters": ["only_uvicorn_access"],
       "stream": "ext://sys.stdout"
     }
   },
   "loggers": {
     "": {
-      "handlers": ["default"],
+      "handlers": ["standard_stdout"],
       "level": "INFO"
     },
     "entsoe_api": {
-      "handlers": ["default"],
+      "handlers": ["standard_stdout"],
       "level": "DEBUG",
       "propagate": false
     },
     "uvicorn": {
-      "handlers": ["default"],
+      "handlers": ["standard_stdout"],
       "level": "INFO",
       "propagate": false
     },
     "uvicorn.error": {
-      "handlers": ["default"],
+      "handlers": ["standard_stdout"],
       "level": "INFO",
       "propagate": false
     },
     "uvicorn.access": {
-      "handlers": ["access"],
+      "handlers": ["access_stdout"],
       "level": "INFO",
       "propagate": false
     }
